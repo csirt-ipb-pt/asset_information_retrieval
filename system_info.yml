@@ -1,0 +1,64 @@
+---
+ - hosts: all
+   vars_prompt:
+    - name: ansible_password
+      prompt: Enter password
+      private: yes 
+   vars:
+    ipv4_addresses: []
+    ipv6_addresses: []
+   tasks:
+   - name: hostname
+     debug:
+       var=ansible_hostname
+
+   - name: date and time
+     vars:
+      msg: |
+       Date: {{ ansible_date_time.date }}
+       Timezone: {{ ansible_date_time.tz }}
+     debug:
+      msg: "{{ msg.split('\n') }}"
+
+   - name: get ip address
+     ansible.builtin.set_fact:
+      ipv4_addresses: "{{ipv4_addresses + [item] if item is not search(':') else ipv4_addresses}}"
+      ipv6_addresses: "{{ipv6_addresses + [item] if item is search(':') else ipv6_addresses}}"
+     loop: "{{ansible_ip_addresses}}"
+     when: ansible_os_family == 'Windows'
+
+   - name: network info
+     vars:
+      msg: |
+       All Interface List: {{ ansible_interfaces if ansible_os_family != 'Windows' else ansible_interfaces | map(attribute='connection_name') | flatten}}
+       All IPv4: {{ ansible_all_ipv4_addresses if ansible_os_family != 'Windows' else ipv4_addresses }}
+       All IPv6: {{ ansible_all_ipv6_addresses if ansible_os_family != 'Windows' else ipv6_addresses }}
+       Gateway: {{ ansible_default_ipv4.gateway | default('None') if ansible_os_family != 'Windows' else ansible_interfaces | map(attribute='default_gateway') | flatten | first | default('null')}}
+     debug:
+       msg: "{{ msg.split('\n') }}"
+
+   - name: mac info
+     debug:
+       msg: "{{ ansible_interfaces | difference(['lo']) | map('regex_replace', '^(.*)$', 'ansible_\\1' ) | map('extract', hostvars[inventory_hostname], 'macaddress') | list if ansible_os_family != 'Windows' else ansible_interfaces | map(attribute='macaddress') | flatten}}"
+
+   - name: OS and Kernel info
+     vars:
+      msg: |
+       Distribution: {{ ansible_distribution}}
+       Release: {{ ansible_distribution_release | default("None")}}
+       Distribution Version: {{ ansible_distribution_version | default("Unreachable") }}
+       Kernel: {{ ansible_kernel }}
+       Architecture: {{ ansible_architecture }}
+     debug:
+      msg: "{{ msg.split('\n') }}"
+
+
+   - name: HW info
+     vars:
+      msg: |
+       CPU: {{ ansible_processor}}
+       CPU Core: {{ ansible_processor_cores if ansible_os_family != "Windows" else ansible_processor_vcpus}}
+       RAM: {{ ansible_memtotal_mb}}
+       SWAP: {{ ansible_memory_mb.swap.total | default("None")}}
+     debug:
+      msg: "{{ msg.split('\n') }}"
